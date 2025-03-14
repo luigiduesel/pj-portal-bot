@@ -1,9 +1,9 @@
 # PJ-Portal Bot for Checking Available Slots
 ## 🔐 An open-source, data-privacy-oriented alternative to quickpj.de 🔐
-Many medical students face challenges securing a spot at their preferred hospital for their PJ. While [quickpj.de](quickpj.de) provides a convenient way to receive notifications when desired slots become available on pj-portal.de, its approach raises privacy concerns. The platform requires full login credentials, which, if compromised, could allow third parties to deregister students from their entire practical training. Additionally, quickpj.de is a paid service, adding a financial barrier for students.
+Many medical students face challenges securing a spot at their preferred hospital for their PJ. While [www.quickpj.de](https://www.quickpj.de/) provides a convenient way to receive notifications when desired slots become available on pj-portal.de, its approach raises privacy concerns. The platform requires full login credentials, which, if compromised, could allow third parties to deregister students from their entire practical training. Additionally, quickpj.de is a paid service, adding a financial barrier for students. This open-source approach lets you run your own bot as a simple docker container on your own hardware to ensure full control over your sensitive data like your login credentials to the pj-portal.de. The necessary technical skills to run this bot are considerable low and all the required setup steps are explained in detail in the following. The hardware requirements are very minimal, allowing it to run on Raspberry Pis, vServer of Cloud Hosers or your own PC.
 
 ## 📝 Prerequisites 📝
-Your university must be among the participating universities of the pj-portal.de. A list of those can be found on pj-portal.de. Those include currently:
+Your university must be among the participating universities of the pj-portal.de and you must already have obtained login credentials for the platform. A list of the participating universities can be found on pj-portal.de. Those include currently:
 - Universität Münster
 - RWTH Aachen 
 - Universität Augsburg
@@ -46,15 +46,14 @@ Your university must be among the participating universities of the pj-portal.de
 
 ## 🚀 How to use 🚀
 ### 1. Set up Pushover 🔑
-1. Go to https://pushover.net/signup
-2. Signup for a Pushover Account
-3. Save your Pushover User Key (looks like e.g. xg7m2vtqnflo5p3zbkydw64cjj8r9s)
-3. Register your Device e.g. for phone
+1. Go to https://pushover.net/signup and sign up for a Pushover account and 30-days-trial
+2. Save your Pushover User Key (could look like xg7m2vtqnflo5p3zbkydw64cjj8r9s)
+3. Register your device e.g. your phone by downloading the app and login 
 4. Create an application (https://pushover.net/apps/build)
-5. Save your Pushover Application API Token/Key (looks like e.g. a4ot22m6d3569wwk76wpgsc3jdyfv4)
+5. Save your Pushover Application API Token/Key (could look like a4ot22m6d3569wwk76wpgsc3jdyfv4)
 
 
-### 2. Retrieve ajax_id 🔬
+### 2. Retrieve ajax_uid 🔬
 1. Go to pj-portal.de
 2. Login with your credentials
 3. Go to tab "PJ Angebot"
@@ -142,7 +141,7 @@ If you need to access the shell in a running container later, you can do so with
 `docker exec -it pjportalbot /bin/bash`
 
 ### 7. Test the notification with a different env configuration (optional) 📲
-I strongly suggest testing the notification of the bot by using a configuration that returns guranteed open slots and therefore safely triggers a push notification to your device.
+It is strongly suggested testing the notification of the bot by using a configuration that returns guaranteed open slots and therefore safely triggers a push notification to your device.
 
 ## 🤝 Contribution 🤝
 Contribution to this repository is warmly welcomed. Please feel free to open a pull-request.
