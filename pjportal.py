@@ -14,13 +14,13 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S%z"
 )
 
-
-
+ENV_VAR_OPTIONAL = ['pushover_user', 'pushover_token', 'ntfy_url_topic', 'cookie_filepath']
+ENV_VAR_REQUIRED = ['pjportal_user', 'pjportal_pwd', 'ajax_uid', 'pj_tag', 'hospital', 'term', 'check_frequency_lower_limit', 'check_frequency_upper_limit', 'cookie_default_value']
+ENV_VAR_list = ENV_VAR_REQUIRED + ENV_VAR_OPTIONAL
 ENV_VAR = {}
 
 def load_env():
     global ENV_VAR
-    ENV_VAR_list = ['pushover_user', 'pushover_token', 'pjportal_user', 'pjportal_pwd', 'ajax_uid', 'pj_tag', 'hospital', 'term', 'check_frequency_lower_limit', 'check_frequency_upper_limit', 'cookie_default_value', 'cookie_filepath']
     ENV_VAR = {var_name: os.getenv(var_name) for var_name in ENV_VAR_list}
     # logging.info(f"ENV: {ENV_VAR}")
     if os.path.exists(ENV_VAR['cookie_filepath']):
@@ -30,7 +30,7 @@ def load_env():
     elif ENV_VAR['cookie_default_value']:
         logging.info(f"No cookie file found on path {(ENV_VAR['cookie_filepath'])}, use cookie saved in env")
         save_cookie(ENV_VAR['cookie_default_value'])
-    missing_vars = [key for key, value in ENV_VAR.items() if key != "cookie_default_value" and value is None]
+    missing_vars = [key for key, value in ENV_VAR.items() if key not in ENV_VAR_OPTIONAL and value is None]
     if missing_vars:
         raise ValueError(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
     logging.info("Successfully loaded all required environment variables.")
@@ -143,8 +143,22 @@ def extract_table_from_response(response):
     return parsing_result_dict
 
 
-
 def send_push_message(msg):
+    pushover_user = os.environ.get('pushover_user')
+    pushover_token = os.environ.get('pushover_token')
+    ntfy_url_topic = os.environ.get('ntfy_url_topic')
+
+    if pushover_user and pushover_token:
+        send_pushover_notification(msg)
+
+    if ntfy_url_topic:
+        send_ntfy_notification(msg)
+
+    logging.warning("No credentials for Pushover nor ntfy specified as environment variables.")
+    return None
+
+
+def send_pushover_notification(msg):
     conn = http.client.HTTPSConnection("api.pushover.net:443")
     conn.request("POST", "/1/messages.json",
     urllib.parse.urlencode({
@@ -153,8 +167,19 @@ def send_push_message(msg):
         "message": msg,
     }), { "Content-type": "application/x-www-form-urlencoded" })
     response = conn.getresponse()
-    return response
+    if not response.status == 200:
+        logging.warning(f"Notification failed. Status: {response.status}, Reason: {response.reason}")
 
+
+def send_ntfy_notification(msg):
+    url = f'{ENV_VAR["ntfy_url_topic"]}'
+    headers = {
+        "Title": "Found something on pj-portal.de",
+        "Priority": str(5)
+    }
+    response = requests.post(url, data=msg.encode('utf-8'), headers=headers)
+    if not response.status_code == 200:
+        logging.warning(f"Failed to send notification through ntfy: {response.status_code} - {response.text}")
 
 
 def run_main():
