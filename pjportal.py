@@ -147,15 +147,12 @@ def send_push_message(msg):
     pushover_user = os.environ.get('pushover_user')
     pushover_token = os.environ.get('pushover_token')
     ntfy_url_topic = os.environ.get('ntfy_url_topic')
-
     if pushover_user and pushover_token:
         send_pushover_notification(msg)
-
     if ntfy_url_topic:
         send_ntfy_notification(msg)
-
-    logging.warning("No credentials for Pushover nor ntfy specified as environment variables.")
-    return None
+    if not (pushover_user and pushover_token) and not ntfy_url_topic:
+        logging.warning("No credentials for either Pushover or ntfy specified as env.")
 
 
 def send_pushover_notification(msg):
