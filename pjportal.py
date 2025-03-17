@@ -221,6 +221,7 @@ def run_main():
     logging.info("Script completed.")
 
 
+MAX_RETRIES = 5 
 
 if __name__ == "__main__":
     logging.info("--------------------------------------------")
@@ -229,10 +230,20 @@ if __name__ == "__main__":
     ENV_VAR = load_env()
     logging.info("Sleeping a short time...")
     time.sleep(random.randint(int(ENV_VAR['check_frequency_lower_limit']), int(ENV_VAR['check_frequency_upper_limit'])))
-    try:
-        run_main()
-    except Exception as e:
-        logging.error(e)
-        error_msg = f"pj-portal.py failed with error {e}"
-        send_push_message(msg=f"Script Failure! Script will be stopped, therefore no further checks are executed. Following error occurred: {error_msg}")
-        sys.exit(1)
+    retries = 0
+    while retries < MAX_RETRIES:
+        try:
+            run_main()
+            logging.info("Script executed successfully.")
+            break
+        except Exception as e:
+            retries += 1
+            logging.error(f"Attempt {retries} failed with error: {e}")
+            if retries >= MAX_RETRIES:
+                error_msg = f"pj-portal.py failed after {MAX_RETRIES} attempts with error: {e}"
+                send_push_message(msg=f"Script Failure! Script will be stopped. Following error occurred: {error_msg}")
+                sys.exit(1)
+            else:
+                wait_time = 2 ** retries
+                logging.info(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
