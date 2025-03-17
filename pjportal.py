@@ -234,7 +234,8 @@ if __name__ == "__main__":
     while retries < MAX_RETRIES:
         try:
             run_main()
-            logging.info("Script executed successfully.")
+            if retries > 0:
+                logging.info(f"Script executed successfully after {retries} retries.")
             break
         except Exception as e:
             retries += 1
