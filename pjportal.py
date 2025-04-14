@@ -135,7 +135,10 @@ def extract_table_from_response(response):
   
                         
                     if (elem.attrib["class"]) in [" tertial_verfuegbarkeit verfuegbar  buchungsphase  ", " tertial_verfuegbarkeit ausgebucht  buchungsphase  "]:
-                        slots = elem.xpath('.//text()')[0].strip()
+                        try:
+                            slots = elem.xpath('.//text()')[0].strip()
+                        except:
+                            slots = '0/0'
 
                         parsing_result_dict[pj_tag][hospital][term_desc[tertiar_counter]] = tuple_of_ints = tuple(map(int, slots.split('/')))
                         tertiar_counter += 1
@@ -228,8 +231,9 @@ if __name__ == "__main__":
     logging.info("Script started")
     logging.info("Loading ENV...")
     ENV_VAR = load_env()
-    logging.info("Sleeping a short time...")
-    time.sleep(random.randint(int(ENV_VAR['check_frequency_lower_limit']), int(ENV_VAR['check_frequency_upper_limit'])))
+    sleeptime = random.randint(int(ENV_VAR['check_frequency_lower_limit']), int(ENV_VAR['check_frequency_upper_limit']))
+    logging.info(f"Sleeping for {sleeptime}s...")
+    time.sleep(sleeptime)
     retries = 0
     while retries < MAX_RETRIES:
         try:
