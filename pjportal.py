@@ -132,9 +132,8 @@ def extract_table_from_response(response):
                     if (elem.attrib["class"]) == "merkliste_pj_info_krankenhaus":
                         hospital = elem.xpath('.//text()')[1].strip()
                         parsing_result_dict[pj_tag][hospital] = {term_desc[0]: None, term_desc[1]: None, term_desc[2]: None}
-  
-                        
-                    if (elem.attrib["class"]) in [" tertial_verfuegbarkeit verfuegbar  buchungsphase  ", " tertial_verfuegbarkeit ausgebucht  buchungsphase  "]:
+     
+                    if (elem.attrib["class"]) in [" tertial_verfuegbarkeit verfuegbar  buchungsphase  ", " tertial_verfuegbarkeit ausgebucht  buchungsphase  ", " tertial_verfuegbarkeit verfuegbar  ", " tertial_verfuegbarkeit ausgebucht  "]:
                         try:
                             slots = elem.xpath('.//text()')[0].strip()
                         except:
@@ -198,6 +197,7 @@ def run_main():
 
     def run_table_check(table_dict, pj_tag, hospital, term):
         logging.info("Parsing data from request and checking the table...")
+        logging.info(table_dict)
         result_tuple = table_dict[pj_tag][hospital][term]
         info = f"{result_tuple[0]}/{result_tuple[1]}"
         if result_tuple[0] > 0:
