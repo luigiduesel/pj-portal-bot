@@ -116,11 +116,11 @@ def extract_table_from_response(response):
     for row in tree.xpath(f"{main_xpath}"):
         
         i+=1
-        if row.attrib["class"] == "merkliste_pj_info_fach":
+        if row.attrib["class"] == "merkliste pj_info_fach":
             cols = row.xpath('.//td')
             for elem in cols:
-                if (elem.attrib["class"]) == "merkliste_fach ":
-                    pj_tag = elem.xpath('.//text()')[1].strip()
+                if (elem.attrib["class"]) == ' ':
+                    pj_tag = elem.xpath('.//text()')[0].strip()
                     parsing_result_dict[pj_tag] = {}
 
         elif row.attrib["class"] == "merkliste_krankenhaus":
@@ -129,17 +129,20 @@ def extract_table_from_response(response):
             term_desc = ["first_term", "second_term", "third_term"]
             for elem in cols:
                 if 'class' in elem.attrib:
-                    if (elem.attrib["class"]) == "merkliste_pj_info_krankenhaus":
-                        hospital = elem.xpath('.//text()')[1].strip()
+
+                    if (elem.attrib["class"]) == "pj_info_bezeichnung_krankenhaus ":
+
+                        hospital = elem.xpath('.//text()')[2].strip()
                         parsing_result_dict[pj_tag][hospital] = {term_desc[0]: None, term_desc[1]: None, term_desc[2]: None}
      
-                    if (elem.attrib["class"]) in [" tertial_verfuegbarkeit verfuegbar  buchungsphase  ", " tertial_verfuegbarkeit ausgebucht  buchungsphase  ", " tertial_verfuegbarkeit verfuegbar  ", " tertial_verfuegbarkeit ausgebucht  "]:
+                    if (elem.attrib["class"]) in [" tertial_verfuegbarkeit   verfuegbar  buchungsphase  ", " tertial_verfuegbarkeit   ausgebucht  buchungsphase  ", " tertial_verfuegbarkeit verfuegbar  buchungsphase  ", " tertial_verfuegbarkeit ausgebucht  buchungsphase  ", " tertial_verfuegbarkeit verfuegbar  ", " tertial_verfuegbarkeit ausgebucht  "]:
+                        testint = elem.xpath('.//text()')
                         try:
                             slots = elem.xpath('.//text()')[0].strip()
                         except:
                             slots = '0/0'
-
-                        parsing_result_dict[pj_tag][hospital][term_desc[tertiar_counter]] = tuple_of_ints = tuple(map(int, slots.split('/')))
+                        slots = slots or '0/0'
+                        parsing_result_dict[pj_tag][hospital][term_desc[tertiar_counter]] = tuple(map(int, slots.split('/')))
                         tertiar_counter += 1
 
     return parsing_result_dict
@@ -211,7 +214,12 @@ def run_main():
     try:
         response = request_open_slots(session, cookie=ENV_VAR['cookie_default_value'])
         table_dict = extract_table_from_response(response)
+        
         run_table_check(table_dict=table_dict, pj_tag=ENV_VAR["pj_tag"], hospital=ENV_VAR["hospital"], term=ENV_VAR["term"])
+
+    except IndexError as e:
+        logging.warnign("Got a IndexError")
+        sys.exit(1)
 
     except Exception as e:
         logging.warning("Trying new authentication!")
