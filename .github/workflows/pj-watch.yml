@@ -69,3 +69,7 @@ jobs:
           EOF
           
           echo "Alle Checks erledigt."
+          
+          # Cleanup aller Container zur Sicherheit
+          docker ps -q | xargs -r docker stop 2>/dev/null || true
+          docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
