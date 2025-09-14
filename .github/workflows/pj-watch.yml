@@ -1,4 +1,4 @@
-name: PJ Watch (alle Krankenhäuser)
+name: PJ Watch (Alle Krankenhäuser)
 on:
   schedule:
     - cron: "*/15 5-22 * * *"   # alle 15 Min, 07–24 Uhr (Sommerzeit UTC+2)
@@ -12,10 +12,10 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 5  # Hartes Limit: 5 Minuten für alles
+    timeout-minutes: 3  # 3 Minuten sollten reichen
     
     steps:
-      - name: Prüfe alle Krankenhäuser nacheinander (Einmal-Check, ohne Wartezeit)
+      - name: PJ Portal Check - Alle Krankenhäuser
         env:
           PUSHOVER_USER: ${{ secrets.pushover_user }}
           PUSHOVER_TOKEN: ${{ secrets.pushover_token }}
@@ -24,81 +24,55 @@ jobs:
           AJAX_UID: ${{ secrets.ajax_uid }}
           PJ_TAG: ${{ secrets.pj_tag }}
           TERM: ${{ secrets.term }}
-          HOSPITAL_LIST: ${{ secrets.hospital_list }}
         run: |
           set -euo pipefail
           
-          # Safety: Secret gefüllt?
-          if [ -z "${HOSPITAL_LIST//[$'\t\r\n ']/}" ]; then
-            echo "ERROR: HOSPITAL_LIST ist leer."
-            exit 1
-          fi
+          echo "========================================="
+          echo "PJ Portal Bot Check"
+          echo "Zeit: $(date)"
+          echo "========================================="
           
-          run_one() {
-            local HOSP="$1"
-            local CONTAINER_NAME="pj-$$-$RANDOM"
-            
-            echo "==> Check für: $HOSP ($(date))"
-            echo "    Container Name: $CONTAINER_NAME"
-            
-            # Container im HINTERGRUND starten (-d = detached)
-            docker run -d \
-              --name "$CONTAINER_NAME" \
-              -e pushover_user="$PUSHOVER_USER" \
-              -e pushover_token="$PUSHOVER_TOKEN" \
-              -e pjportal_user="$PJ_USER" \
-              -e pjportal_pwd="$PJ_PWD" \
-              -e ajax_uid="$AJAX_UID" \
-              -e pj_tag="$PJ_TAG" \
-              -e hospital="$HOSP" \
-              -e term="$TERM" \
-              -e check_frequency_lower_limit="1" \
-              -e check_frequency_upper_limit="1" \
-              -e cookie_filepath="/usr/src/app/cookie.txt" \
-              madrhr/pjportalbot > /dev/null
-            
-            echo "    Container gestartet, warte 30 Sekunden für Check..."
-            
-            # 30 Sekunden warten (sollte für einen Check reichen)
-            sleep 30
-            
-            # Container Logs anzeigen (falls was wichtiges passiert ist)
-            echo "    Logs:"
-            docker logs --tail 20 "$CONTAINER_NAME" 2>&1 || true
-            
-            # Container stoppen und entfernen
-            echo "    Stoppe Container..."
-            docker stop "$CONTAINER_NAME" > /dev/null 2>&1 || true
-            docker rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
-            
-            echo "✓ $HOSP Check beendet"
-          }
+          # Container Name mit Timestamp
+          CONTAINER_NAME="pjbot-$(date +%s)"
           
-          # Alle Krankenhäuser durchgehen
-          COUNT=0
-          while IFS= read -r line || [ -n "$line" ]; do
-            H="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-            [ -z "$H" ] && continue
-            
-            COUNT=$((COUNT + 1))
-            echo ""
-            echo "========================================="
-            echo "Krankenhaus $COUNT"
-            echo "========================================="
-            
-            run_one "$H"
-          done <<EOF
-          ${HOSPITAL_LIST}
-          EOF
+          echo "Starte Bot (Container: $CONTAINER_NAME)..."
+          
+          # Bot im Hintergrund starten
+          # Der Bot checkt AUTOMATISCH ALLE Krankenhäuser!
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            -e pushover_user="$PUSHOVER_USER" \
+            -e pushover_token="$PUSHOVER_TOKEN" \
+            -e pjportal_user="$PJ_USER" \
+            -e pjportal_pwd="$PJ_PWD" \
+            -e ajax_uid="$AJAX_UID" \
+            -e pj_tag="$PJ_TAG" \
+            -e term="$TERM" \
+            -e check_frequency_lower_limit="1" \
+            -e check_frequency_upper_limit="1" \
+            -e cookie_filepath="/usr/src/app/cookie.txt" \
+            madrhr/pjportalbot > /dev/null
+          
+          echo "Bot läuft... warte auf Ergebnis..."
+          
+          # 45 Sekunden warten - sollte für einen kompletten Check reichen
+          sleep 45
+          
+          echo ""
+          echo "=== Bot Logs (letzte 50 Zeilen) ==="
+          docker logs --tail 50 "$CONTAINER_NAME" 2>&1 || true
+          
+          echo ""
+          echo "=== Stoppe Bot ==="
+          docker stop "$CONTAINER_NAME" > /dev/null 2>&1 || true
+          docker rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
           
           echo ""
           echo "========================================="
-          echo "Alle $COUNT Checks erledigt"
+          echo "Check abgeschlossen: $(date)"
           echo "========================================="
           
-          # Sicherheitshalber: ALLE Docker Container stoppen und löschen
-          echo "Finale Bereinigung..."
-          docker ps -q | xargs -r docker stop 2>/dev/null || true
-          docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
+          # Cleanup
+          docker container prune -f > /dev/null 2>&1 || true
           
           exit 0
