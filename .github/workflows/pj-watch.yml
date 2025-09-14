@@ -2,8 +2,8 @@ name: PJ Watch (alle Krankenhäuser)
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # alle 15 Minuten (UTC-Zeit!)
-  workflow_dispatch:          # erlaubt manuelles Starten
+    - cron: "*/15 5-22 * * *"   # alle 15 Minuten, 07–24 Uhr deutsche Zeit (UTC+2)
+  workflow_dispatch:             # manuell startbar
 
 jobs:
   run:
