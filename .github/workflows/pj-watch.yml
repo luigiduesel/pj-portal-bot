@@ -12,7 +12,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Gesamter Job wird nach 10 Min beendet
+    timeout-minutes: 2  # Gesamter Job wird nach 10 Min beendet
     steps:
       - name: Prüfe alle Krankenhäuser nacheinander (Einmal-Check, ohne Wartezeit)
         env:
@@ -38,7 +38,7 @@ jobs:
             echo "==> Check für: $HOSP ($(date))"
             
             # Container mit Timeout - nach 2 Min wird er beendet
-            if timeout 120 docker run --rm \
+            if timeout 80 docker run --rm \
               -e pushover_user="$PUSHOVER_USER" \
               -e pushover_token="$PUSHOVER_TOKEN" \
               -e pjportal_user="$PJ_USER" \
