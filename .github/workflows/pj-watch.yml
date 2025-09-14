@@ -98,17 +98,24 @@ jobs:
           SUCCESS=0
           FAILED=0
           
+          echo "=== Starte Krankenhaus-Checks ==="
+          
           # Mehrzeiliges Secret sauber zeilenweise verarbeiten
           while IFS= read -r line || [ -n "$line" ]; do
             H="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
             [ -z "$H" ] && continue
             
+            echo "Verarbeite Zeile: '$H'"
             ((TOTAL++))
+            
             if run_one "$H"; then
               ((SUCCESS++))
             else
               ((FAILED++))
             fi
+            
+            # Kurze Pause zwischen Checks
+            sleep 2
           done <<EOF
           ${HOSPITAL_LIST}
           EOF
