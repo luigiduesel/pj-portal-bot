@@ -1,7 +1,7 @@
 name: PJ Watch (alle Krankenhäuser)
 on:
   schedule:
-    - cron: "*/15 5-22 * * *"   # alle 15 Min, 07–24 Uhr (Sommerzeit UTC+2)
+    - cron: "0,15,30,45 5-22 * * *"   # alle 15 Min, 07–24 Uhr (Sommerzeit UTC+2)
   workflow_dispatch:             # manuell startbar
 
 concurrency:
