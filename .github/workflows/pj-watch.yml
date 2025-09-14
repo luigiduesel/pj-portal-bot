@@ -40,10 +40,9 @@ jobs:
               madrhr/pjportalbot
           }
 
-          while IFS= read -r line || [ -n "$line" ]; do
+          # Mehrzeiliges Secret zeilenweise verarbeiten:
+          printf '%s\n' "$HOSPITAL_LIST" | while IFS= read -r line; do
             H="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
             [ -z "$H" ] && continue
             run_one "$H"
-          done << 'EOF_HOSPITALS'
-          '"${HOSPITAL_LIST}"'
-          EOF_HOSPITALS
+          done
