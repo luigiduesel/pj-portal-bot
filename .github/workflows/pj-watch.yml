@@ -3,16 +3,14 @@ on:
   schedule:
     - cron: "*/15 5-22 * * *"   # alle 15 Min, 07–24 Uhr (Sommerzeit UTC+2)
   workflow_dispatch:             # manuell startbar
-
 # verhindert Überschneidungen – neuer Run cancelt den alten
 concurrency:
   group: pj-watch
   cancel-in-progress: true
-
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 2  # Gesamter Job wird nach 10 Min beendet
+    # Kein Job-Timeout - Container regeln sich selbst
     steps:
       - name: Prüfe alle Krankenhäuser nacheinander (Einmal-Check, ohne Wartezeit)
         env:
@@ -37,8 +35,8 @@ jobs:
             local HOSP="$1"
             echo "==> Check für: $HOSP ($(date))"
             
-            # Container mit Timeout - nach 2 Min wird er beendet
-            if timeout 80 docker run --rm \
+            # Container mit --init für saubere Beendigung
+            docker run --rm --init \
               -e pushover_user="$PUSHOVER_USER" \
               -e pushover_token="$PUSHOVER_TOKEN" \
               -e pjportal_user="$PJ_USER" \
@@ -50,16 +48,9 @@ jobs:
               -e check_frequency_lower_limit="1" \
               -e check_frequency_upper_limit="1" \
               -e cookie_filepath="/usr/src/app/cookie.txt" \
-              madrhr/pjportalbot; then
-              echo "✓ $HOSP erfolgreich abgeschlossen"
-            else
-              local EXIT_CODE=$?
-              if [ $EXIT_CODE -eq 124 ]; then
-                echo "⚠ $HOSP: Timeout nach 2 Minuten - Container wurde beendet"
-              else
-                echo "⚠ $HOSP: Fehler (Exit Code: $EXIT_CODE)"
-              fi
-            fi
+              madrhr/pjportalbot
+            
+            echo "✓ $HOSP erfolgreich abgeschlossen"
           }
           
           # Mehrzeiliges Secret sauber zeilenweise verarbeiten (ohne xargs)
