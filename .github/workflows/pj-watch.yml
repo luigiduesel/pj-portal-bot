@@ -1,10 +1,9 @@
-name: PJ Watch (Alle Krankenhäuser)
+name: PJ Watch (alle Krankenhäuser)
 on:
   schedule:
     - cron: "*/15 5-22 * * *"   # alle 15 Min, 07–24 Uhr (Sommerzeit UTC+2)
   workflow_dispatch:             # manuell startbar
 
-# verhindert Überschneidungen – neuer Run cancelt den alten
 concurrency:
   group: pj-watch
   cancel-in-progress: true
@@ -12,10 +11,13 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 3  # 3 Minuten sollten reichen
+    timeout-minutes: 6           # harter Cut: nach 6 Min abbrechen
     
     steps:
-      - name: PJ Portal Check - Alle Krankenhäuser
+      - name: Docker-Image vorab ziehen (einmal pro Run)
+        run: docker pull madrhr/pjportalbot:latest
+        
+      - name: Prüfe alle Krankenhäuser nacheinander (Einmal-Check)
         env:
           PUSHOVER_USER: ${{ secrets.pushover_user }}
           PUSHOVER_TOKEN: ${{ secrets.pushover_token }}
@@ -24,55 +26,46 @@ jobs:
           AJAX_UID: ${{ secrets.ajax_uid }}
           PJ_TAG: ${{ secrets.pj_tag }}
           TERM: ${{ secrets.term }}
+          HOSPITAL_LIST: ${{ secrets.hospital_list }}
         run: |
           set -euo pipefail
           
-          echo "========================================="
-          echo "PJ Portal Bot Check"
-          echo "Zeit: $(date)"
-          echo "========================================="
+          if [ -z "${HOSPITAL_LIST//[$'\t\r\n ']/}" ]; then
+            echo "ERROR: HOSPITAL_LIST ist leer."
+            exit 1
+          fi
           
-          # Container Name mit Timestamp
-          CONTAINER_NAME="pjbot-$(date +%s)"
+          run_one() {
+            local HOSP="$1"
+            echo "==> Check für: $HOSP"
+            
+            # Original-Befehl mit hospital Variable
+            docker run --rm --init \
+              -e pushover_user="$PUSHOVER_USER" \
+              -e pushover_token="$PUSHOVER_TOKEN" \
+              -e pjportal_user="$PJ_USER" \
+              -e pjportal_pwd="$PJ_PWD" \
+              -e ajax_uid="$AJAX_UID" \
+              -e pj_tag="$PJ_TAG" \
+              -e hospital="$HOSP" \
+              -e term="$TERM" \
+              -e check_frequency_lower_limit="0" \
+              -e check_frequency_upper_limit="0" \
+              -e cookie_filepath="/usr/src/app/cookie.txt" \
+              madrhr/pjportalbot:latest || {
+                echo "⚠️ Fehler bei $HOSP - fahre fort"
+              }
+            
+            echo "✓ Check abgeschlossen"
+          }
           
-          echo "Starte Bot (Container: $CONTAINER_NAME)..."
+          # Mehrzeiliges Secret zeilenweise verarbeiten
+          while IFS= read -r line || [ -n "$line" ]; do
+            H="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+            [ -z "$H" ] && continue
+            run_one "$H"
+          done <<EOF
+          ${HOSPITAL_LIST}
+          EOF
           
-          # Bot im Hintergrund starten
-          # Der Bot checkt AUTOMATISCH ALLE Krankenhäuser!
-          docker run -d \
-            --name "$CONTAINER_NAME" \
-            -e pushover_user="$PUSHOVER_USER" \
-            -e pushover_token="$PUSHOVER_TOKEN" \
-            -e pjportal_user="$PJ_USER" \
-            -e pjportal_pwd="$PJ_PWD" \
-            -e ajax_uid="$AJAX_UID" \
-            -e pj_tag="$PJ_TAG" \
-            -e term="$TERM" \
-            -e check_frequency_lower_limit="1" \
-            -e check_frequency_upper_limit="1" \
-            -e cookie_filepath="/usr/src/app/cookie.txt" \
-            madrhr/pjportalbot > /dev/null
-          
-          echo "Bot läuft... warte auf Ergebnis..."
-          
-          # 45 Sekunden warten - sollte für einen kompletten Check reichen
-          sleep 45
-          
-          echo ""
-          echo "=== Bot Logs (letzte 50 Zeilen) ==="
-          docker logs --tail 50 "$CONTAINER_NAME" 2>&1 || true
-          
-          echo ""
-          echo "=== Stoppe Bot ==="
-          docker stop "$CONTAINER_NAME" > /dev/null 2>&1 || true
-          docker rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
-          
-          echo ""
-          echo "========================================="
-          echo "Check abgeschlossen: $(date)"
-          echo "========================================="
-          
-          # Cleanup
-          docker container prune -f > /dev/null 2>&1 || true
-          
-          exit 0
+          echo "Alle Checks erledigt."
