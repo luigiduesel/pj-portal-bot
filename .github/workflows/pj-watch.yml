@@ -44,8 +44,8 @@ jobs:
               -e pj_tag="$PJ_TAG" \
               -e hospital="$HOSP" \
               -e term="$TERM" \
-              -e check_frequency_lower_limit="0" \
-              -e check_frequency_upper_limit="0" \
+              -e check_frequency_lower_limit="1" \
+              -e check_frequency_upper_limit="1" \
               -e cookie_filepath="/usr/src/app/cookie.txt" \
               madrhr/pjportalbot
           }
