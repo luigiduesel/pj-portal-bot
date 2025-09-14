@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     
-      - name: Prüfe alle Krankenhäuser nacheinander
+      - name: Prüfe alle Krankenhäuser (parallel)
         env:
           PUSHOVER_USER: ${{ secrets.pushover_user }}
           PUSHOVER_TOKEN: ${{ secrets.pushover_token }}
@@ -22,24 +22,23 @@ jobs:
           HOSPITAL_LIST: ${{ secrets.hospital_list }}
         run: |
           set -euo pipefail
-
-          run_one() {
-            local HOSP="$1"
-            echo "==> Starte Check für: $HOSP"
-            docker run --rm \
+          echo "Starte $(printf '%s\n' "$HOSPITAL_LIST" | grep -c .) Klinik-Checks ..."
+          printf '%s\n' "$HOSPITAL_LIST" | grep . | \
+            xargs -I{} -P 4 docker run --rm \
               -e pushover_user="$PUSHOVER_USER" \
               -e pushover_token="$PUSHOVER_TOKEN" \
               -e pjportal_user="$PJ_USER" \
               -e pjportal_pwd="$PJ_PWD" \
               -e ajax_uid="$AJAX_UID" \
               -e pj_tag="$PJ_TAG" \
-              -e hospital="$HOSP" \
+              -e hospital="{}" \
               -e term="$TERM" \
-              -e check_frequency_lower_limit="60" \
-              -e check_frequency_upper_limit="360" \
+              -e check_frequency_lower_limit="1" \
+              -e check_frequency_upper_limit="2" \
               -e cookie_filepath="/usr/src/app/cookie.txt" \
               madrhr/pjportalbot
-          }
+          echo "Alle Checks erledigt."
+
 
           # Mehrzeiliges Secret sauber verarbeiten
           printf '%s\n' "$HOSPITAL_LIST" | while IFS= read -r line; do
