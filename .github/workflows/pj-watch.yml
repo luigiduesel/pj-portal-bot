@@ -100,18 +100,34 @@ jobs:
           
           echo "=== Starte Krankenhaus-Checks ==="
           
+          # Test: Kann Docker Image gepullt werden?
+          echo "Teste Docker-Zugriff..."
+          if docker pull madrhr/pjportalbot >/dev/null 2>&1; then
+            echo "✓ Docker Image verfügbar"
+          else
+            echo "⚠️ Warnung: Konnte Docker Image nicht pullen, versuche trotzdem..."
+          fi
+          
           # Mehrzeiliges Secret sauber zeilenweise verarbeiten
           while IFS= read -r line || [ -n "$line" ]; do
+            # Trim whitespace
             H="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-            [ -z "$H" ] && continue
             
-            echo "Verarbeite Zeile: '$H'"
+            # Skip empty lines
+            if [ -z "$H" ]; then
+              echo "Überspringe leere Zeile"
+              continue
+            fi
+            
+            echo "----------------------------------------"
+            echo "Krankenhaus #$((TOTAL + 1))"
             ((TOTAL++))
             
             if run_one "$H"; then
               ((SUCCESS++))
             else
               ((FAILED++))
+              echo "    Fehler bei Krankenhaus #${TOTAL}"
             fi
             
             # Kurze Pause zwischen Checks
