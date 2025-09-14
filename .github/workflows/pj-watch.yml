@@ -12,7 +12,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Sicherheitsnetz - 30 Min sollten reichen
+    timeout-minutes: 10  # Gesamter Job max 10 Minuten
     
     steps:
       - name: Prüfe alle Krankenhäuser nacheinander (Einmal-Check, ohne Wartezeit)
@@ -38,54 +38,62 @@ jobs:
             local HOSP="$1"
             echo "==> Check für: $HOSP ($(date))"
             
-            # Container mit --init und --rm für saubere Beendigung
-            docker run --rm --init \
-              --stop-timeout=30 \
-              -e pushover_user="$PUSHOVER_USER" \
-              -e pushover_token="$PUSHOVER_TOKEN" \
-              -e pjportal_user="$PJ_USER" \
-              -e pjportal_pwd="$PJ_PWD" \
-              -e ajax_uid="$AJAX_UID" \
-              -e pj_tag="$PJ_TAG" \
-              -e hospital="$HOSP" \
-              -e term="$TERM" \
-              -e check_frequency_lower_limit="1" \
-              -e check_frequency_upper_limit="1" \
-              -e cookie_filepath="/usr/src/app/cookie.txt" \
-              madrhr/pjportalbot || {
-                echo "⚠️ Fehler bei $HOSP - fahre mit nächstem fort"
-                return 0  # Nicht abbrechen, weitermachen
-              }
+            # Bot maximal 90 Sekunden laufen lassen
+            # - Der Bot macht seinen Check
+            # - Nach 90 Sek wird er gestoppt (sollte reichen für einen Check)
+            # - Nach 100 Sek wird er gekillt falls TERM nicht reicht
+            timeout --kill-after=100 90 \
+              docker run --rm --init \
+                -e pushover_user="$PUSHOVER_USER" \
+                -e pushover_token="$PUSHOVER_TOKEN" \
+                -e pjportal_user="$PJ_USER" \
+                -e pjportal_pwd="$PJ_PWD" \
+                -e ajax_uid="$AJAX_UID" \
+                -e pj_tag="$PJ_TAG" \
+                -e hospital="$HOSP" \
+                -e term="$TERM" \
+                -e check_frequency_lower_limit="1" \
+                -e check_frequency_upper_limit="1" \
+                -e cookie_filepath="/usr/src/app/cookie.txt" \
+                madrhr/pjportalbot || {
+                  CODE=$?
+                  if [ $CODE -eq 124 ] || [ $CODE -eq 137 ]; then
+                    echo "✓ Timeout erreicht (normal) - Check wurde durchgeführt"
+                  else
+                    echo "⚠️ Fehler Code $CODE bei $HOSP"
+                  fi
+                  return 0  # Weitermachen mit nächstem Krankenhaus
+                }
             
             echo "✓ $HOSP erfolgreich abgeschlossen"
           }
           
-          # Mehrzeiliges Secret sauber zeilenweise verarbeiten
+          # Alle Krankenhäuser durchgehen
+          COUNT=0
           while IFS= read -r line || [ -n "$line" ]; do
             H="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
             [ -z "$H" ] && continue
+            
+            COUNT=$((COUNT + 1))
+            echo ""
+            echo "========================================="
+            echo "Krankenhaus $COUNT"
+            echo "========================================="
+            
             run_one "$H"
             
-            # Kleine Pause zwischen den Checks
+            # 2 Sekunden Pause zwischen Checks
             sleep 2
           done <<EOF
           ${HOSPITAL_LIST}
           EOF
           
-          echo "=== Alle Checks erledigt ==="
+          echo ""
+          echo "========================================="
+          echo "Alle $COUNT Checks erledigt"
+          echo "========================================="
           
           # Docker cleanup
           docker container prune -f || true
-          docker system prune -f || true
           
-          echo "=== Docker cleanup abgeschlossen ==="
           exit 0
-
-      - name: Forciertes Cleanup
-        if: always()
-        run: |
-          # Falls noch Container laufen, alle stoppen
-          docker ps -q | xargs -r docker stop || true
-          docker ps -aq | xargs -r docker rm -f || true
-          docker system prune -af --volumes || true
-          echo "Forciertes Cleanup abgeschlossen"
