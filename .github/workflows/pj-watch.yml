@@ -1,5 +1,4 @@
 name: PJ Watch (alle Krankenhäuser)
-
 on:
   schedule:
     - cron: "*/15 5-22 * * *"   # alle 15 Min, 07–24 Uhr (Sommerzeit UTC+2)
@@ -13,6 +12,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Gesamter Job wird nach 10 Min beendet
     steps:
       - name: Prüfe alle Krankenhäuser nacheinander (Einmal-Check, ohne Wartezeit)
         env:
@@ -26,16 +26,19 @@ jobs:
           HOSPITAL_LIST: ${{ secrets.hospital_list }}
         run: |
           set -euo pipefail
-
+          
           # Safety: Secret gefüllt?
           if [ -z "${HOSPITAL_LIST//[$'\t\r\n ']/}" ]; then
-            echo "ERROR: HOSPITAL_LIST ist leer."; exit 1
+            echo "ERROR: HOSPITAL_LIST ist leer."
+            exit 1
           fi
-
+          
           run_one() {
             local HOSP="$1"
-            echo "==> Check für: $HOSP"
-            docker run --rm \
+            echo "==> Check für: $HOSP ($(date))"
+            
+            # Container mit Timeout - nach 2 Min wird er beendet
+            if timeout 120 docker run --rm \
               -e pushover_user="$PUSHOVER_USER" \
               -e pushover_token="$PUSHOVER_TOKEN" \
               -e pjportal_user="$PJ_USER" \
@@ -47,9 +50,18 @@ jobs:
               -e check_frequency_lower_limit="1" \
               -e check_frequency_upper_limit="1" \
               -e cookie_filepath="/usr/src/app/cookie.txt" \
-              madrhr/pjportalbot
+              madrhr/pjportalbot; then
+              echo "✓ $HOSP erfolgreich abgeschlossen"
+            else
+              local EXIT_CODE=$?
+              if [ $EXIT_CODE -eq 124 ]; then
+                echo "⚠ $HOSP: Timeout nach 2 Minuten - Container wurde beendet"
+              else
+                echo "⚠ $HOSP: Fehler (Exit Code: $EXIT_CODE)"
+              fi
+            fi
           }
-
+          
           # Mehrzeiliges Secret sauber zeilenweise verarbeiten (ohne xargs)
           # - trimmt Leerzeichen
           # - überspringt leere Zeilen
@@ -60,9 +72,15 @@ jobs:
           done <<EOF
           ${HOSPITAL_LIST}
           EOF
-
+          
           echo "Alle Checks erledigt – Run beendet."
-
-          # Docker cleanup
+          
+          # Docker cleanup - alle Container und Images aufräumen
           docker system prune -f || true
+          docker container prune -f || true
+          
           echo "Docker cleanup abgeschlossen"
+          echo "=== GitHub Action wird jetzt beendet ==="
+          
+          # Explizit erfolgreichen Exit
+          exit 0
