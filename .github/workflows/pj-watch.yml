@@ -2,15 +2,19 @@ name: PJ Watch (alle Krankenhäuser)
 
 on:
   schedule:
-    - cron: "*/15 5-22 * * *"   # alle 15 Minuten, 07–24 Uhr (Sommerzeit, UTC+2)
+    - cron: "*/15 5-22 * * *"   # alle 15 Min, 07–24 Uhr (Sommerzeit UTC+2)
   workflow_dispatch:             # manuell startbar
+
+# verhindert Überschneidungen – neuer Run cancelt den alten
+concurrency:
+  group: pj-watch
+  cancel-in-progress: true
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-    
-      - name: Prüfe alle Krankenhäuser (parallel)
+      - name: Prüfe alle Krankenhäuser nacheinander (Einmal-Check, ohne Wartezeit)
         env:
           PUSHOVER_USER: ${{ secrets.pushover_user }}
           PUSHOVER_TOKEN: ${{ secrets.pushover_token }}
@@ -22,29 +26,39 @@ jobs:
           HOSPITAL_LIST: ${{ secrets.hospital_list }}
         run: |
           set -euo pipefail
-          echo "Starte $(printf '%s\n' "$HOSPITAL_LIST" | grep -c .) Klinik-Checks ..."
-          printf '%s\n' "$HOSPITAL_LIST" | grep . | \
-            xargs -I{} -P 4 docker run --rm \
-              -e check_frequency_lower_limit="0" \
-              -e check_frequency_upper_limit="0"
+
+          # Safety: Secret gefüllt?
+          if [ -z "${HOSPITAL_LIST//[$'\t\r\n ']/}" ]; then
+            echo "ERROR: HOSPITAL_LIST ist leer."; exit 1
+          fi
+
+          run_one() {
+            local HOSP="$1"
+            echo "==> Check für: $HOSP"
+            docker run --rm \
               -e pushover_user="$PUSHOVER_USER" \
               -e pushover_token="$PUSHOVER_TOKEN" \
               -e pjportal_user="$PJ_USER" \
               -e pjportal_pwd="$PJ_PWD" \
               -e ajax_uid="$AJAX_UID" \
               -e pj_tag="$PJ_TAG" \
-              -e hospital="{}" \
+              -e hospital="$HOSP" \
               -e term="$TERM" \
-              -e check_frequency_lower_limit="1" \
-              -e check_frequency_upper_limit="2" \
+              -e check_frequency_lower_limit="0" \
+              -e check_frequency_upper_limit="0" \
               -e cookie_filepath="/usr/src/app/cookie.txt" \
               madrhr/pjportalbot
-          echo "Alle Checks erledigt."
+          }
 
-
-          # Mehrzeiliges Secret sauber verarbeiten
-          printf '%s\n' "$HOSPITAL_LIST" | while IFS= read -r line; do
+          # Mehrzeiliges Secret sauber zeilenweise verarbeiten (ohne xargs)
+          # - trimmt Leerzeichen
+          # - überspringt leere Zeilen
+          while IFS= read -r line || [ -n "$line" ]; do
             H="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
             [ -z "$H" ] && continue
             run_one "$H"
-          done
+          done <<EOF
+          ${HOSPITAL_LIST}
+          EOF
+
+          echo "Alle Checks erledigt – Run beendet."
