@@ -1,0 +1,49 @@
+name: PJ Watch (alle Krankenhäuser)
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # alle 15 Minuten (UTC-Zeit!)
+  workflow_dispatch:          # erlaubt manuelles Starten
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prüfe alle Krankenhäuser nacheinander
+        env:
+          PUSHOVER_USER: ${{ secrets.pushover_user }}
+          PUSHOVER_TOKEN: ${{ secrets.pushover_token }}
+          PJ_USER: ${{ secrets.pjportal_user }}
+          PJ_PWD: ${{ secrets.pjportal_pwd }}
+          AJAX_UID: ${{ secrets.ajax_uid }}
+          PJ_TAG: ${{ secrets.pj_tag }}
+          TERM: ${{ secrets.term }}
+          HOSPITAL_LIST: ${{ secrets.hospital_list }}
+        run: |
+          set -euo pipefail
+
+          run_one() {
+            local HOSP="$1"
+            echo "==> Starte Check für: $HOSP"
+            docker run --rm \
+              -e pushover_user="$PUSHOVER_USER" \
+              -e pushover_token="$PUSHOVER_TOKEN" \
+              -e pjportal_user="$PJ_USER" \
+              -e pjportal_pwd="$PJ_PWD" \
+              -e ajax_uid="$AJAX_UID" \
+              -e pj_tag="$PJ_TAG" \
+              -e hospital="$HOSP" \
+              -e term="$TERM" \
+              -e check_frequency_lower_limit="60" \
+              -e check_frequency_upper_limit="360" \
+              -e cookie_filepath="/usr/src/app/cookie.txt" \
+              madrhr/pjportalbot
+          }
+
+          while IFS= read -r line || [ -n "$line" ]; do
+            H="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+            [ -z "$H" ] && continue
+            run_one "$H"
+          done << 'EOF_HOSPITALS'
+          '"${HOSPITAL_LIST}"'
+          EOF_HOSPITALS
