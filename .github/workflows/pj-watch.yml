@@ -12,6 +12,16 @@ jobs:
       - name: Prüfe alle Krankenhäuser nacheinander
         env:
           PUSHOVER_USER: ${{ secrets.pushover_user }}
+          ...
+
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prüfe alle Krankenhäuser nacheinander
+        env:
+          PUSHOVER_USER: ${{ secrets.pushover_user }}
           PUSHOVER_TOKEN: ${{ secrets.pushover_token }}
           PJ_USER: ${{ secrets.pjportal_user }}
           PJ_PWD: ${{ secrets.pjportal_pwd }}
