@@ -25,6 +25,8 @@ jobs:
           echo "Starte $(printf '%s\n' "$HOSPITAL_LIST" | grep -c .) Klinik-Checks ..."
           printf '%s\n' "$HOSPITAL_LIST" | grep . | \
             xargs -I{} -P 4 docker run --rm \
+              -e check_frequency_lower_limit="0" \
+              -e check_frequency_upper_limit="0"
               -e pushover_user="$PUSHOVER_USER" \
               -e pushover_token="$PUSHOVER_TOKEN" \
               -e pjportal_user="$PJ_USER" \
