@@ -62,3 +62,7 @@ jobs:
           EOF
 
           echo "Alle Checks erledigt – Run beendet."
+
+          # Docker cleanup
+          docker system prune -f || true
+          echo "Docker cleanup abgeschlossen"
