@@ -12,7 +12,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Globales Timeout als Sicherheitsnetz
+    timeout-minutes: 30  # Sicherheitsnetz - 30 Min sollten reichen
     
     steps:
       - name: Prüfe alle Krankenhäuser nacheinander (Einmal-Check, ohne Wartezeit)
@@ -34,142 +34,58 @@ jobs:
             exit 1
           fi
           
-          # Cleanup-Funktion für Signalhandling
-          cleanup() {
-            echo "=== Cleanup wird ausgeführt ==="
-            # Alle laufenden Docker-Container stoppen
-            docker ps -q | xargs -r docker stop --time=5 2>/dev/null || true
-            docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
-            echo "Cleanup abgeschlossen"
-          }
-          
-          # Signal-Handler registrieren
-          trap cleanup EXIT INT TERM
-          
           run_one() {
             local HOSP="$1"
-            local CONTAINER_NAME="pj-check-$(echo "$HOSP" | tr ' /' '-' | tr -d '[:punct:]' | tr '[:upper:]' '[:lower:]')-$$"
-            local MAX_RUNTIME=120  # 2 Minuten max pro Container
-            
             echo "==> Check für: $HOSP ($(date))"
-            echo "    Container: $CONTAINER_NAME"
             
-            # Container mit Namen, Timeout und besseren Stop-Signalen
-            timeout --preserve-status --signal=TERM --kill-after=10 $MAX_RUNTIME \
-              docker run --rm \
-                --name "$CONTAINER_NAME" \
-                --init \
-                --stop-signal=SIGTERM \
-                --stop-timeout=10 \
-                --memory="512m" \
-                --memory-swap="512m" \
-                --cpus="0.5" \
-                -e pushover_user="$PUSHOVER_USER" \
-                -e pushover_token="$PUSHOVER_TOKEN" \
-                -e pjportal_user="$PJ_USER" \
-                -e pjportal_pwd="$PJ_PWD" \
-                -e ajax_uid="$AJAX_UID" \
-                -e pj_tag="$PJ_TAG" \
-                -e hospital="$HOSP" \
-                -e term="$TERM" \
-                -e check_frequency_lower_limit="1" \
-                -e check_frequency_upper_limit="1" \
-                -e cookie_filepath="/usr/src/app/cookie.txt" \
-                madrhr/pjportalbot || {
-                  local EXIT_CODE=$?
-                  echo "⚠️ Container für $HOSP beendet mit Code: $EXIT_CODE"
-                  
-                  # Bei Timeout oder anderen Fehlern: Container forcieren zu stoppen
-                  docker stop "$CONTAINER_NAME" 2>/dev/null || true
-                  docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
-                  
-                  # Nicht bei ersten Fehler abbrechen, andere Krankenhäuser trotzdem prüfen
-                  return 0
-                }
+            # Container mit --init und --rm für saubere Beendigung
+            docker run --rm --init \
+              --stop-timeout=30 \
+              -e pushover_user="$PUSHOVER_USER" \
+              -e pushover_token="$PUSHOVER_TOKEN" \
+              -e pjportal_user="$PJ_USER" \
+              -e pjportal_pwd="$PJ_PWD" \
+              -e ajax_uid="$AJAX_UID" \
+              -e pj_tag="$PJ_TAG" \
+              -e hospital="$HOSP" \
+              -e term="$TERM" \
+              -e check_frequency_lower_limit="1" \
+              -e check_frequency_upper_limit="1" \
+              -e cookie_filepath="/usr/src/app/cookie.txt" \
+              madrhr/pjportalbot || {
+                echo "⚠️ Fehler bei $HOSP - fahre mit nächstem fort"
+                return 0  # Nicht abbrechen, weitermachen
+              }
             
             echo "✓ $HOSP erfolgreich abgeschlossen"
-            
-            # Kurze Pause zwischen Checks (verhindert Race Conditions)
-            sleep 2
           }
-          
-          # Counter für Statistik
-          TOTAL=0
-          SUCCESS=0
-          FAILED=0
-          
-          echo "=== Starte Krankenhaus-Checks ==="
-          
-          # Test: Kann Docker Image gepullt werden?
-          echo "Teste Docker-Zugriff..."
-          if docker pull madrhr/pjportalbot >/dev/null 2>&1; then
-            echo "✓ Docker Image verfügbar"
-          else
-            echo "⚠️ Warnung: Konnte Docker Image nicht pullen, versuche trotzdem..."
-          fi
           
           # Mehrzeiliges Secret sauber zeilenweise verarbeiten
           while IFS= read -r line || [ -n "$line" ]; do
-            # Trim whitespace
             H="$(echo "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+            [ -z "$H" ] && continue
+            run_one "$H"
             
-            # Skip empty lines
-            if [ -z "$H" ]; then
-              echo "Überspringe leere Zeile"
-              continue
-            fi
-            
-            echo "----------------------------------------"
-            echo "Krankenhaus #$((TOTAL + 1))"
-            ((TOTAL++))
-            
-            if run_one "$H"; then
-              ((SUCCESS++))
-            else
-              ((FAILED++))
-              echo "    Fehler bei Krankenhaus #${TOTAL}"
-            fi
-            
-            # Kurze Pause zwischen Checks
+            # Kleine Pause zwischen den Checks
             sleep 2
           done <<EOF
           ${HOSPITAL_LIST}
           EOF
           
-          echo "=== Statistik ==="
-          echo "Gesamt: $TOTAL | Erfolgreich: $SUCCESS | Fehlgeschlagen: $FAILED"
+          echo "=== Alle Checks erledigt ==="
           
-          # Aggressiveres Docker Cleanup
-          echo "=== Docker Cleanup ==="
-          
-          # Stoppe alle Container (falls noch welche laufen)
-          docker ps -q | xargs -r docker stop --time=5 2>/dev/null || true
-          
-          # Entferne alle gestoppten Container
+          # Docker cleanup
           docker container prune -f || true
+          docker system prune -f || true
           
-          # Entferne ungenutzte Images (optional, kann auskommentiert werden)
-          # docker image prune -f || true
-          
-          # System-weites Cleanup
-          docker system prune -f --volumes || true
-          
-          echo "Docker cleanup abgeschlossen"
-          echo "=== GitHub Action wird jetzt beendet ==="
-          
-          # Exit mit Fehler nur wenn ALLE fehlgeschlagen sind
-          if [ $SUCCESS -eq 0 ] && [ $TOTAL -gt 0 ]; then
-            echo "ERROR: Alle Checks fehlgeschlagen!"
-            exit 1
-          fi
-          
+          echo "=== Docker cleanup abgeschlossen ==="
           exit 0
 
-      - name: Post-Run Cleanup
+      - name: Forciertes Cleanup
         if: always()
         run: |
-          echo "=== Post-Run Cleanup ==="
-          # Forciere Cleanup aller Docker-Ressourcen
-          docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
-          docker system prune -af --volumes 2>/dev/null || true
-          echo "Post-Run Cleanup abgeschlossen"
+          # Falls noch Container laufen, alle stoppen
+          docker ps -q | xargs -r docker stop || true
+          docker ps -aq | xargs -r docker rm -f || true
+          docker system prune -af --volumes || true
+          echo "Forciertes Cleanup abgeschlossen"
