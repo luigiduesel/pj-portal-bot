@@ -11,7 +11,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 6           # harter Cut: nach 6 Min abbrechen
+    timeout-minutes: 3           # harter Cut: nach 6 Min abbrechen
     
     steps:
       - name: Docker-Image vorab ziehen (einmal pro Run)
